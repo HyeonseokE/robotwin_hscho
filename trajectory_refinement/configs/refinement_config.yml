@@ -1,0 +1,18 @@
+# VLM Trajectory Refinement Configuration
+
+# 반복 루프 설정
+max_iterations: 5          # 최대 반복 횟수
+check_num: 5               # 성공률 검증 에피소드 수
+success_threshold: 0.5     # 목표 성공률 (0.0 ~ 1.0)
+
+# EE 포즈 기록 설정
+record_ee_freq: 15         # 매 N 시뮬레이션 스텝마다 EE 포즈 기록
+sample_interval: 1         # 웨이포인트 다운샘플 간격
+
+# IK/TOPP 설정
+topp_step: 0.004           # TOPP 보간 스텝 (1/250 = 0.004)
+max_ik_fail_fraction: 0.3  # 허용 가능한 IK 실패 비율
+
+# 경로 설정
+save_dir: "./camera_images"
+output_dir: "./trajectory_refinement/output"

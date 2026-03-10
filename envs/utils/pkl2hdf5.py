@@ -75,13 +75,53 @@ def create_hdf5_from_dict(hdf5_group, data_dict):
                 print(f"Error storing value for key '{key}': {e}")
 
 
+def concat_camera_views(head_imgs, wrist_imgs_list):
+    """Concatenate head_camera and wrist cameras side by side.
+    wrist_imgs_list is a list of image arrays (e.g. [left_wrist, right_wrist]).
+    Resizes wrist images to match head image height if needed."""
+    n = len(head_imgs)
+    concat_frames = []
+    for i in range(n):
+        parts = [head_imgs[i]]
+        h_h = head_imgs[i].shape[0]
+        for wrist_imgs in wrist_imgs_list:
+            w_img = wrist_imgs[i]
+            w_h, w_w = w_img.shape[:2]
+            if w_h != h_h:
+                scale = h_h / w_h
+                new_w = int(w_w * scale)
+                w_img = cv2.resize(w_img, (new_w, h_h))
+            parts.append(w_img)
+        concat_frames.append(np.concatenate(parts, axis=1))
+    return np.array(concat_frames)
+
+
 def pkl_files_to_hdf5_and_video(pkl_files, hdf5_path, video_path):
     data_list = parse_dict_structure(load_pkl_file(pkl_files[0]))
     for pkl_file_path in pkl_files:
         pkl_file = load_pkl_file(pkl_file_path)
         append_data_to_structure(data_list, pkl_file)
 
-    images_to_video(np.array(data_list["observation"]["head_camera"]["rgb"]), out_path=video_path)
+    head_imgs = np.array(data_list["observation"]["head_camera"]["rgb"])
+    images_to_video(head_imgs, out_path=video_path)
+
+    # Save concatenated head + wrist camera(s) video
+    obs = data_list.get("observation", {})
+    wrist_imgs_list = []
+    if "left_camera" in obs and obs["left_camera"].get("rgb"):
+        wrist_imgs_list.append(np.array(obs["left_camera"]["rgb"]))
+    if "right_camera" in obs and obs["right_camera"].get("rgb"):
+        wrist_imgs_list.append(np.array(obs["right_camera"]["rgb"]))
+    if wrist_imgs_list:
+        concat_imgs = concat_camera_views(head_imgs, wrist_imgs_list)
+        concat_video_path = video_path.replace(".mp4", "_concat.mp4")
+        images_to_video(concat_imgs, out_path=concat_video_path)
+
+    # Save observer camera (third_view) video
+    if "third_view_rgb" in data_list and data_list["third_view_rgb"]:
+        observer_imgs = np.array(data_list["third_view_rgb"])
+        observer_video_path = video_path.replace(".mp4", "_observer.mp4")
+        images_to_video(observer_imgs, out_path=observer_video_path)
 
     with h5py.File(hdf5_path, "w") as f:
         create_hdf5_from_dict(f, data_list)
