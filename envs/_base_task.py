@@ -116,6 +116,7 @@ class Base_Task(gym.Env):
         self.right_cnt = 0
 
         self.instruction = None  # for Eval
+        self._subgoal_offset = None  # 3-element np.ndarray set by perturbation layer
 
         self.create_table_and_wall(table_xy_bias=table_xy_bias, table_height=0.74)
         self.load_robot(**kwags)
@@ -912,6 +913,22 @@ class Base_Task(gym.Env):
         left_actions = get_actions(actions, "left")
         right_actions = get_actions(actions, "right")
 
+        # --- Subgoal perturbation (set externally by closed_loop_cap) ---
+        # Decision is per-Action, not per-subtask: skill functions tag each
+        # Action with ``transit=True|False`` based on whether its target_pose
+        # is an in-air approach (perturbable) or a contact subgoal (never
+        # perturb — would smash the gripper past the object).
+        offset = getattr(self, "_subgoal_offset", None)
+        if offset is not None:
+            import numpy as _np
+            for act in left_actions + right_actions:
+                if (act is not None and act.action == "move"
+                        and act.target_pose is not None
+                        and act.args.get("transit", False)):
+                    pose = _np.asarray(act.target_pose, dtype=_np.float64)
+                    pose[:3] += offset
+                    act.target_pose = pose
+
         max_len = max(len(left_actions), len(right_actions))
         left_actions += [None] * (max_len - len(left_actions))
         right_actions += [None] * (max_len - len(right_actions))
@@ -1202,17 +1219,22 @@ class Base_Task(gym.Env):
         )
         if pre_grasp_pose == grasp_pose:
             return arm_tag, [
-                Action(arm_tag, "move", target_pose=pre_grasp_pose),
+                # Pre-grasp + grasp are coincident → the single move IS the
+                # contact subgoal. Do not perturb.
+                Action(arm_tag, "move", target_pose=pre_grasp_pose, transit=False),
                 Action(arm_tag, "close", target_gripper_pos=gripper_pos),
             ]
         else:
             return arm_tag, [
-                Action(arm_tag, "move", target_pose=pre_grasp_pose),
+                # pre-grasp approach: in-air transit → perturbable.
+                Action(arm_tag, "move", target_pose=pre_grasp_pose, transit=True),
+                # grasp: contact with the actor → must not perturb.
                 Action(
                     arm_tag,
                     "move",
                     target_pose=grasp_pose,
                     constraint_pose=[1, 1, 1, 0, 0, 0],
+                    transit=False,
                 ),
                 Action(arm_tag, "close", target_gripper_pos=gripper_pos),
             ]
@@ -1340,8 +1362,10 @@ class Base_Task(gym.Env):
             place_pose = [0, 0, 0, 0, 0, 0, 0]
 
         actions = [
-            Action(arm_tag, "move", target_pose=place_pre_pose),
-            Action(arm_tag, "move", target_pose=place_pose),
+            # Pre-place approach: in-air / above target → perturbable transit.
+            Action(arm_tag, "move", target_pose=place_pre_pose, transit=True),
+            # Place: final placement onto/against the target → must not perturb.
+            Action(arm_tag, "move", target_pose=place_pose, transit=False),
         ]
         if is_open:
             actions.append(Action(arm_tag, "open", target_gripper_pos=1.0))
@@ -1372,14 +1396,17 @@ class Base_Task(gym.Env):
         origin_pose += displacement
         if quat is not None:
             origin_pose[3:] = quat
-        return arm_tag, [Action(arm_tag, "move", target_pose=origin_pose)]
+        # Pure relative displacement — always a transit subgoal.
+        return arm_tag, [Action(arm_tag, "move", target_pose=origin_pose, transit=True)]
 
     def move_to_pose(
         self,
         arm_tag: ArmTag,
         target_pose: list | np.ndarray | sapien.Pose,
     ):
-        return arm_tag, [Action(arm_tag, "move", target_pose=target_pose)]
+        # Free pose target — treated as a transit subgoal. Callers that want
+        # to reach a contact pose should use grasp_actor/place_actor instead.
+        return arm_tag, [Action(arm_tag, "move", target_pose=target_pose, transit=True)]
 
     def close_gripper(self, arm_tag: ArmTag, pos: float = 0.0):
         return arm_tag, [Action(arm_tag, "close", target_gripper_pos=pos)]
@@ -1388,10 +1415,13 @@ class Base_Task(gym.Env):
         return arm_tag, [Action(arm_tag, "open", target_gripper_pos=pos)]
 
     def back_to_origin(self, arm_tag: ArmTag):
+        # Return-to-home is always in-air transit.
         if arm_tag == "left":
-            return arm_tag, [Action(arm_tag, "move", self.robot.left_original_pose)]
+            return arm_tag, [Action(arm_tag, "move",
+                                    self.robot.left_original_pose, transit=True)]
         elif arm_tag == "right":
-            return arm_tag, [Action(arm_tag, "move", self.robot.right_original_pose)]
+            return arm_tag, [Action(arm_tag, "move",
+                                    self.robot.right_original_pose, transit=True)]
         return None, []
 
     def get_arm_pose(self, arm_tag: ArmTag):

@@ -1,0 +1,78 @@
+# Recording Configuration — Perturbation ENABLED variant
+# -----------------------------------------------------------------------------
+# Copy of recording_config.yaml with perturbation.subgoal.enabled = true.
+# Pass via --recording-config to opt in for a collection run without touching
+# the default baseline.
+
+dataset_repo_id: "robotwin/{task}"
+recording_fps: 30
+robot_type: "aloha-agilex"
+
+use_videos: true
+image_writer_threads: 4
+
+include_failures: true
+
+camera_latency_steps: 0
+randomize_latency: false
+
+cameras:
+  shared:
+    - name: "top"
+      source: "head_camera"
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+  left_arm:
+    - name: "wrist"
+      source: "left_camera"
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+  right_arm:
+    - name: "wrist"
+      source: "right_camera"
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+
+skill_features:
+  natural_language: true
+  verification_question: true
+  type: true
+  progress: true
+  goal_position:
+    joint: true
+    left_ee: true
+    right_ee: true
+    gripper: true
+
+subtask_features:
+  natural_language: true
+  object_name: true
+  target_position: true
+
+observation_features:
+  state: true
+  action: true
+  ee_pose:
+    left: true
+    right: true
+  images: true
+
+privileged_features:
+  enabled: false
+  object_pose: true
+  contact: true
+  ee_pose: true
+  table_height: true
+
+# ------ PERTURBATION: ENABLED ------
+perturbation:
+  subgoal:
+    enabled: true
+    sigma: 0.05
+    clip_factor: 2.0

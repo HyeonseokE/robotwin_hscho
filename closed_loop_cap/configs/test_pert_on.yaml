@@ -1,0 +1,72 @@
+# Base configuration for closed_loop_cap pipeline.
+# Pure runtime settings — model assignments live in paid_api_config.yaml,
+# recording / dataset / camera / perturbation settings live in recording_config.yaml.
+# Both companion files are auto-overlaid from the same directory at load time.
+# Override at runtime with --config, --recording-config, or by editing the
+# respective companion yaml.
+
+# ----- Retry / budget -----
+max_plan_retries: 2              # Layer 1 planner re-prompts (total calls = 1 + retries)
+max_subtask_retries: 3           # Layer 2 codegen re-prompts per subtask
+max_consecutive_subtask_fails: 2 # L1-S7 cascade: abort episode when this many
+                                 # subtasks in a row exhaust their retries
+max_total_steps: 30              # episode-wide upper bound (subtask attempts)
+subtask_exec_timeout_s: 30.0     # sandbox timeout for a single exec()
+
+# ----- No-op detection (Layer 2 signal L2-S6) -----
+# An execution counts as no-op if ALL of these hold:
+noop_ee_delta_m: 0.01            # EE pose change threshold (meters)
+noop_gripper_delta: 0.01         # Gripper joint change threshold (normalized)
+
+# ----- Physics instability (Layer 3 L3-U*) - immediate abort -----
+instability_linear_velocity_threshold_m_s: 2.0
+instability_table_drop_margin_m: 0.1
+
+# ----- Place-skill destination proximity (Layer 3 L3-SKL-PLACE-DIST) -----
+# After a place, the held object's xy must land within this distance of the
+# destination actor's pose. Coarse default (10cm) — tighter bounds create
+# false negatives when functional-point offsets exceed the actor center.
+place_destination_tolerance_m: 0.10
+
+# ----- VLM auth + transport (model names live in paid_api_config.yaml) -----
+vlm:
+  api_key_path: closed_loop_cap/gemini_api_key.json
+  temperature: 0.0
+  max_output_tokens: 4096
+  image_max_side_px: 768          # resize before sending to API
+  api_max_retries: 3              # rate limit / 5xx backoff
+  api_backoff_base_s: 2.0
+
+# ----- RoboTwin environment -----
+env:
+  camera_name: head_camera
+  embodiment: [aloha-agilex]
+  domain_randomization:
+    random_background: false
+    cluttered_table: false
+    clean_background_rate: 1.0
+    random_head_camera_dis: 0
+    random_table_height: 0.0
+    random_light: false
+    crazy_random_light_rate: 0.0
+    random_embodiment: false
+  data_type:
+    rgb: true
+    depth: false
+    pointcloud: false
+    endpose: true
+    qpos: true
+    mesh_segmentation: false
+    actor_segmentation: false
+
+# ----- Debugging mp4 (FfmpegRecorder; not the LeRobot dataset video) -----
+# LeRobot dataset video lives under recording_config.yaml (cameras + recording_fps).
+video:
+  enabled: true                   # false → no episode.mp4 written (saves CPU + disk)
+  framerate: 10                   # encoded fps; one write per take_action call
+  crf: 23                         # libx264 quality; lower = better but larger
+
+# ----- Output / evaluation -----
+output_dir: closed_loop_cap/output
+check_num: 10                    # MVP: eval on 10 seeds per task (see plan §8 item 9)
+save_successful_traj: true       # call save_traj_data() — fires on success AND failure

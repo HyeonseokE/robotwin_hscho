@@ -28,3 +28,8 @@ envs/curobo/*
 
 /*.json*
 /*.txt
+
+# closed_loop_cap
+closed_loop_cap/gemini_api_key.json
+closed_loop_cap/output/
+closed_loop_cap/**/__pycache__/

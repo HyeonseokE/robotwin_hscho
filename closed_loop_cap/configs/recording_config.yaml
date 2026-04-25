@@ -1,0 +1,122 @@
+# Recording Configuration
+# -----------------------------------------------------------------------------
+# Dataset / camera / feature toggles for closed_loop_cap Phase 2 replay &
+# LeRobot v3.0 recording. Mirrors AutoDataCollector/pipeline_config/
+# recording_config_ws*.yaml for cross-compatibility.
+#
+# Loaded by DatasetRecorder and run_replay.py via the --recording-config flag.
+# Values here override the equivalent sections in the main pipeline config
+# (closed_loop_cap/configs/default.yaml).
+
+# =============================================================================
+# Dataset
+# =============================================================================
+dataset_repo_id: "robotwin/{task}"      # {task} placeholder expanded per-task
+recording_fps: 30                        # sim control rate == LeRobot record rate
+robot_type: "aloha-agilex"               # RoboTwin embodiment name
+
+# Video encoding (sim-specific — ADC uses hardware camera FPS)
+use_videos: true                         # store as .mp4 per camera (LeRobot video)
+image_writer_threads: 4                  # parallelism for frame writing
+
+# Failure handling
+include_failures: true                   # record failure episodes too
+
+# =============================================================================
+# Perturbation (see docs/stochastic_perturbation.md)
+# -----------------------------------------------------------------------------
+# Stochastic trajectory variation applied at rollout time to broaden dataset
+# distribution and provide recovery-trajectory training signal.
+# =============================================================================
+perturbation:
+  # Subgoal-level: perturbs target EE position of transit skills
+  # (move_to_pose / move_by_displacement). Interaction skills
+  # (grasp / place / open_gripper / close_gripper) are never perturbed.
+  subgoal:
+    enabled: false                       # master switch for this recording session
+    sigma: 0.05                          # metres; isotropic Gaussian std-dev
+    clip_factor: 2.0                     # truncate at clip_factor * sigma
+                                         #   (sigma=0.05, clip=2.0 → max offset = 0.10 m)
+
+# Sim2real jitter (not in ADC since ADC is real-world)
+camera_latency_steps: 0                  # 0 = deterministic; 1 = real-world worst-case
+randomize_latency: false                 # uniform [0, camera_latency_steps] per step
+
+# =============================================================================
+# Cameras (LeRobot bi_so_follower pattern)
+#   shared     → observation.images.{name}
+#   left_arm   → observation.images.left_{name}
+#   right_arm  → observation.images.right_{name}
+# =============================================================================
+cameras:
+  shared:
+    - name: "top"
+      source: "head_camera"              # RoboTwin camera name (vs real hw serial)
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+
+  left_arm:
+    - name: "wrist"
+      source: "left_camera"
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+
+  right_arm:
+    - name: "wrist"
+      source: "right_camera"
+      enabled: true
+      width: 320
+      height: 240
+      fps: 30
+
+# =============================================================================
+# Skill Features
+# -----------------------------------------------------------------------------
+# skill.* features — per-feature on/off (ADC parity).
+# =============================================================================
+skill_features:
+  natural_language: true                 # skill.natural_language (NL skill label)
+  verification_question: true            # skill.verification_question (post-cond)
+  type: true                             # skill.type (grasp / place / move_* / …)
+  progress: true                         # skill.progress (0.0~1.0)
+  goal_position:
+    joint: true                          # skill.goal_position.joint (14D qpos)
+    left_ee: true                        # skill.goal_position.left_ee (7D)
+    right_ee: true                       # skill.goal_position.right_ee (7D)
+    gripper: true                        # skill.goal_position.gripper (2D)
+
+# =============================================================================
+# Sub-task Features (upper layer that groups skills)
+# =============================================================================
+subtask_features:
+  natural_language: true                 # subtask.natural_language (NL subtask)
+  object_name: true                      # subtask.object_name (target_actor)
+  target_position: true                  # subtask.target_position ([x,y,z])
+
+# =============================================================================
+# Observation Features
+# =============================================================================
+observation_features:
+  state: true                            # observation.state (14D qpos, ADC-normalized)
+  action: true                           # action (14D target qpos, ADC-normalized)
+  ee_pose:
+    left: true                           # observation.ee_pose.left (7D xyz+quat)
+    right: true                          # observation.ee_pose.right (7D)
+  images: true                           # observation.images.{cam} per camera
+
+# =============================================================================
+# Privileged (Oracle) Features — sim-only, not in ADC
+# -----------------------------------------------------------------------------
+# Ground-truth features from SAPIEN that are unavailable in the real world.
+# Use for debugging, BC-from-priv training, or eval targets.
+# =============================================================================
+privileged_features:
+  enabled: false                         # master switch
+  object_pose: true                      # observation.oracle.object_pose.<actor> (7D)
+  contact: true                          # observation.oracle.contact.<actor>.<finger>
+  ee_pose: true                          # observation.oracle.ee_pose.{left,right}
+  table_height: true                     # observation.oracle.table_height (randomized)

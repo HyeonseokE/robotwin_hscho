@@ -1,0 +1,21 @@
+# Paid API Configuration
+# 유료 API (OpenAI, Google 등) 사용 시 설정
+# closed_loop_cap 파이프라인의 LLM/VLM 모델 중앙 관리용 파일.
+#
+# 본 파일이 존재하면 default.yaml(또는 --config 로 지정한 yaml)의 vlm.* 모델
+# 필드보다 우선 적용됨. 없으면 기본 설정 yaml의 값이 그대로 사용됨.
+
+# Layer 1 — Planner 모델 (initial RGB + task instruction → SubtaskSpec[])
+# 예: gemini-2.5-flash, gemini-3-flash-preview, gpt-4o-mini
+planner_model: "gemini-2.5-flash"
+
+# Layer 2 — Codegen 모델 (subtask → Python snippet)
+# 예: gemini-2.5-flash, gemini-3-flash-preview, gpt-4o-mini
+codegen_model: "gemini-2.5-flash"
+
+# (예약) Judge VLM 모델 — 향후 VLM 기반 judger 도입 시 사용.
+# 현재 judger는 룰 기반(executor/judger.py)이므로 미사용.
+# judge_vlm_model: "gemini-2.5-flash"
+
+# (예약) detect_objects 스킬용 VLM 모델 — 향후 in-loop 객체 재검출 도입 시 사용.
+# detect_objects_model: "gemini-2.5-flash"
